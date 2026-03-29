@@ -10,14 +10,14 @@ import {
   Users, 
   Settings, 
   LogOut, 
-  Plus, 
-  ChevronLeft, 
-  ChevronRight, 
-  DollarSign, 
-  TrendingUp, 
-  Clock, 
-  CheckCircle2, 
-  XCircle, 
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  DollarSign,
+  TrendingUp,
+  Clock,
+  CheckCircle2,
+  XCircle,
   Filter,
   Search,
   MoreVertical,
@@ -35,7 +35,8 @@ import {
   Trash2,
   Check,
   Scissors,
-  Sparkles
+  Sparkles,
+  RefreshCw
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -277,6 +278,7 @@ export default function App() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [servicos, setServicos] = useState<Servico[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // UI States
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -406,21 +408,53 @@ export default function App() {
     };
   }, [session]);
 
+  // Função para recarregar dados manualmente
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    const [
+      { data: clientesData },
+      { data: pedidosData },
+      { data: agendamentosData },
+      { data: funcionariosData },
+      { data: leadsData },
+      { data: profilesData },
+      { data: servicosData }
+    ] = await Promise.all([
+      supabase.from('Clientes').select('*'),
+      supabase.from('Pedidos').select('*'),
+      supabase.from('agendamentos').select('*'),
+      supabase.from('funcionarios').select('*'),
+      supabase.from('leads').select('*'),
+      supabase.from('profiles').select('*'),
+      supabase.from('servicos').select('*')
+    ]);
+
+    if (clientesData) setClientes(clientesData);
+    if (pedidosData) setPedidos(pedidosData);
+    if (agendamentosData) setAgendamentos(agendamentosData);
+    if (funcionariosData) setFuncionarios(funcionariosData);
+    if (leadsData) setLeads(leadsData);
+    if (profilesData) setProfiles(profilesData);
+    if (servicosData) setServicos(servicosData);
+    setIsRefreshing(false);
+  };
+
   // Enriquece agendamentos com status de pagamento
   const agendamentosComPagamento = useMemo(() => {
+    if (!agendamentos || agendamentos.length === 0) return [];
     return agendamentos.map(a => {
       // Busca cliente pelo nome
-      const cliente = clientes.find(c => c.Nome.toLowerCase().trim() === a.cliente_nome.toLowerCase().trim());
+      const cliente = clientes?.find(c => c.Nome?.toLowerCase().trim() === a.cliente_nome?.toLowerCase().trim());
       if (cliente) {
         // Busca pedidos deste cliente
-        const pedidosDoCliente = pedidos.filter(p => p.client_id === cliente.Cliente_id);
+        const pedidosDoCliente = pedidos?.filter(p => p.client_id === cliente.Cliente_id) || [];
         // Se houver pedidos, pega o status do último pedido
         if (pedidosDoCliente.length > 0) {
           const ultimoPedido = pedidosDoCliente[pedidosDoCliente.length - 1];
           return { ...a, pedido_status: ultimoPedido.Status };
         }
       }
-      return a;
+      return { ...a, pedido_status: undefined };
     });
   }, [agendamentos, clientes, pedidos]);
 
@@ -606,8 +640,18 @@ export default function App() {
 
   // --- Render Sections ---
 
-  const renderDashboard = () => (
-    <div className="space-y-8">
+  const renderDashboard = () => {
+    // Verifica se os dados estão carregados
+    if (!clientes || !pedidos || !agendamentos || !leads) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-slate-400">Carregando dados...</div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-8">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-black text-slate-900">Dashboard</h2>
@@ -675,8 +719,9 @@ export default function App() {
           </div>
         </div>
       </div>
-    </div>
-  );
+      </div>
+    );
+  };
 
   const renderMarcacoes = () => {
     const filteredAgendamentos = agendamentosComPagamento.filter(a => {
@@ -1355,6 +1400,19 @@ export default function App() {
             <input type="text" placeholder="Pesquisar..." className="bg-transparent border-none outline-none text-sm w-full" />
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className={cn(
+                "p-2 rounded-xl transition flex items-center gap-2",
+                isRefreshing
+                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                  : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+              )}
+              title="Atualizar dados"
+            >
+              <RefreshCw size={18} className={cn(isRefreshing && "animate-spin")} />
+            </button>
             <button className="relative p-2 text-slate-400 hover:text-slate-600 transition">
               <Clock size={20} />
               <span className="absolute top-1 right-1 w-2 h-2 bg-blue-600 rounded-full border-2 border-white" />
